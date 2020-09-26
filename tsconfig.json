@@ -1,0 +1,25 @@
+{
+    "compilerOptions": {
+        "target": "es2020",
+        "moduleResolution": "Node",
+        "jsx": "react",
+        "allowJs": false,
+        "skipLibCheck": false,
+        "esModuleInterop": false,
+        "allowSyntheticDefaultImports": false,
+        "strict": true,
+        "forceConsistentCasingInFileNames": true,
+        "module": "esnext",
+        "resolveJsonModule": true,
+        "isolatedModules": true,
+        "noEmit": true,
+        "lib": [
+            "dom",
+            "dom.iterable",
+            "es2020"
+        ]
+    },
+    "include": [
+        "src/**/*"
+    ]
+}
