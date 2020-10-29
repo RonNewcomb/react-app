@@ -9,15 +9,6 @@ export const App = () => (
     <div>
       <C2 timeRange="c2timerange" />
     </div>
-    {/* <div>
-      <C3 timeRange="c3timerange" />
-    </div>
-    <div>
-      <C4 timeRange="c4timerange" />
-    </div>
-    <div>
-      <C5 timeRange="c5timerange" />
-    </div> */}
   </div>
 );
 
@@ -41,22 +32,24 @@ function useInterval(seconds: number) {
 type IUseAsync<T> = (T | undefined | boolean)[]; // [T | undefined, boolean];
 
 function useAsync<T>(gettor: (...acceptsRest: any[]) => Promise<T>, rest: any[]): IUseAsync<T> {
-  const [parameters, setParameters] = useState(rest);
   const [state, setState] = useState<IUseAsync<T>>([undefined, true]);
+  const [parameters, setParameters] = useState(rest);
 
-  if (parameters !== rest && parameters.some((_, i) => parameters[i] !== rest[i])) setParameters(rest);
+  if (parameters !== rest && parameters.some((_, i) => parameters[i] !== rest[i])) setParameters(rest); // change detection on parameters
 
-  const go = useCallback((): void => gettor.apply(null, parameters).then(val => setState([val, false])) && void 0, [gettor, parameters]);
+  const callAsyncFn = useCallback(() => {
+    gettor.apply(null, parameters).then(val => setState([val, false]));
+  }, [gettor, parameters]);
 
-  useEffect(go, [go]);
+  useEffect(callAsyncFn, [callAsyncFn]);
 
   return state;
 }
 
 async function getData(query: string, endpoint: string): Promise<string> {
-  console.log("fetching for", endpoint);
+  console.log("fetching for", endpoint, query);
   await milliseconds(Math.random() * 2000 + 1000);
-  console.log("fetched for", endpoint);
+  console.log("fetched", endpoint);
   return query;
 }
 
@@ -77,24 +70,3 @@ function C2(props: IProps) {
   const [data, pending] = useAsync(getData, [query, "c2 #" + time]);
   return pending ? <Loading /> : <>Hello there {data}</>;
 }
-
-// function C3(props: IProps) {
-//   // useInterval(15);
-//   const query = genQuery(props.timeRange, "c3", Math.random());
-//   const [data, pending] = useAsync(getData, query, "c3");
-//   return pending ? <Loading /> : <>Charlie {data} Tango</>;
-// }
-
-// function C4(props: IProps) {
-//   //  useInterval(42);
-//   const query = genQuery(props.timeRange, "c4", Math.random());
-//   const [data, pending] = useAsync(getData, query, "c4");
-//   return pending ? <Loading /> : <>A fox jumped {data}</>;
-// }
-
-// function C5(props: IProps) {
-//   // useInterval(30);
-//   const query = genQuery(props.timeRange, "c5", Math.random());
-//   const [data, pending] = useAsync(getData, query, "c5");
-//   return pending ? <Loading /> : <>{data} is king</>;
-// }
