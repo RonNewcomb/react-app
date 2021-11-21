@@ -1,5 +1,5 @@
-import * as ReactDOM from "react-dom";
 import * as React from "react";
+import * as ReactDOM from "react-dom";
 
 export function modal<T>(renderProp: (closeModal: (returnValue: T) => void) => JSX.Element): Promise<T> {
   const div = document.createElement("div");
