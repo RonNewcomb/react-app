@@ -28,7 +28,7 @@ export function useAmbientModule<T extends object>(
     return () => (typeof teardown === "function" ? teardown() : undefined);
   }, [setupIfPossible, teardown]);
 
-  const [promise, setPromise] = useState(new Promise((resolve, reject) => {}));
+  const [promise, setPromise] = useState(new Promise<T>((resolve, reject) => {}));
 
   return promise;
 }

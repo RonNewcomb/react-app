@@ -1,16 +1,23 @@
 import * as React from "react";
 import { useState, useCallback, useEffect } from "react";
+import { modal } from "./modal";
 
-export const App = () => (
-  <div>
+export const App = () => {
+  const onClickHandler = () => {
+    const answe2 = modal<React.MouseEvent>(close => <div onClick={close}>Do you like bananas?</div>);
+  };
+
+  return (
     <div>
-      <C1 timeRange="c1timerange" />
+      <div>
+        <C1 timeRange="c1timerange" />
+      </div>
+      <div>
+        <C2 timeRange="c2timerange" />
+      </div>
     </div>
-    <div>
-      <C2 timeRange="c2timerange" />
-    </div>
-  </div>
-);
+  );
+};
 
 const genQuery = (timeRange: string, componentName: string, seed: number) => `${seed % 7}`;
 const Loading = () => <h2>Loading</h2>;

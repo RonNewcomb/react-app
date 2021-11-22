@@ -2,21 +2,15 @@ import * as React from "react";
 import * as ReactDOM from "react-dom";
 
 export function modal<T>(renderProp: (closeModal: (returnValue: T) => void) => JSX.Element): Promise<T> {
-  const div = document.createElement("div");
-  document.body.appendChild(div);
+  const overlay = document.createElement("div");
+  overlay.setAttribute("style", "position:fixed; top:0; left:0; height:100vh; width:100vw; background-color:rgba(0,0,0,0.5)");
+  document.body.appendChild(overlay);
   return new Promise(resolve =>
     ReactDOM.render(
-      <>
-        <div style={{ position: "fixed", height: "100vh", width: "100vw", backgroundColor: "rgba(0,0,0,0.5)", pointerEvents: "none" }}></div>
-        <div aria-label="Question." aria-modal="true" tabIndex={-1} style={{ position: "fixed", top: "50%", left: "50%", transform: "translate(-50%,-50%)" }}>
-          {renderProp((modalReturnValue: T) => {
-            document.body.removeChild(div);
-            resolve(modalReturnValue);
-          })}
-        </div>
-      </>,
-      div,
-      () => (div.contains(document.activeElement) ? undefined : (div as any).lastElementChild.focus())
+      <div style={{ position: "fixed", top: "50%", left: "50%", transform: "translate(-50%,-50%)", backgroundColor: document.body.style.backgroundColor }}>
+        {renderProp(modalResult => document.body.removeChild(overlay) && resolve(modalResult))}
+      </div>,
+      overlay
     )
   );
 }
@@ -30,3 +24,5 @@ const YesNo = ({ msg, close }: { msg: string; close: (answer: boolean) => void }
 );
 
 const answer = modal<boolean>(close => <YesNo msg="Do you like bananas?" close={close} />);
+
+//const answe2 = modal<React.MouseEvent>(close => <div onClick={close}>Do you like bananas?</div>);
