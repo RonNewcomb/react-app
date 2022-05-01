@@ -49,9 +49,12 @@ export const choiceModal = (ask: string | JSX.Element, answers: string[]) =>
     </MultipleChoice>
   ));
 
-const examples: { [key: string]: any } = {
-  answer1: await modal<boolean>(close => <YesNo close={close}>Do you like bananas?</YesNo>),
-  answer2: await modal<React.MouseEvent>(close => <div onClick={close}>Click here to continue.</div>),
-  answer3: await yesNoModal("Bananas?"),
-  answer4: await choiceModal("Fruit?", ["Apples", "Bananas", "Oranges"]),
+const examples = async () => {
+  const examples: { [key: string]: any } = {
+    answer1: await modal<boolean>(close => <YesNo close={close}>Do you like bananas?</YesNo>),
+    answer2: await modal<React.MouseEvent>(close => <div onClick={close}>Click here to continue.</div>),
+    answer3: await yesNoModal("Bananas?"),
+    answer4: await choiceModal("Fruit?", ["Apples", "Bananas", "Oranges"]),
+  };
+  return examples;
 };
