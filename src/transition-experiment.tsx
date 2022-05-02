@@ -1,65 +1,94 @@
 import * as React from "react";
-import { useState, useEffect, PropsWithChildren, useMemo, FC, ReactNode } from "react";
+import { useState, useEffect, PropsWithChildren, Component, useRef } from "react";
+import { findDOMNode } from "react-dom";
 
 export const TransitionExperiment = () => {
   const [data, setData] = useState([4, 5, 6]);
 
   useEffect(() => {
-    const i = setInterval(() => setData(old => (old.includes(77) ? old.slice(0, 3) : old.concat(9, 77, 4))), 2000);
+    const i = setInterval(() => setData(old => (old.includes(77) ? old.slice(0, 3) : old.concat(9, 77, 3))), 2000);
     return () => clearInterval(i);
   }, []);
 
   return (
     <div>
-      <AnimateInOut<number>>
+      <DelayUnmount by={500}>
         {data.map(d => (
-          <Item key={d} x={d}></Item>
+          <MyItem key={d} x={d}></MyItem>
         ))}
-      </AnimateInOut>
+      </DelayUnmount>
     </div>
   );
 };
 
-const Item = ({ x }: { x: number }) => {
-  return <div style={{ backgroundColor: "indianred", width: "8em", padding: "2em 8em", margin: "1em" }}>{x}</div>;
-};
+const MyItem = ({ x }: { x: number }) => (
+  <div style={{ backgroundColor: "lightblue", width: "6em", padding: "0.5em", margin: "1em", transition: "width" }}>{x}</div>
+);
 
-const AnimateInOut = <T,>({ children }: PropsWithChildren<{}>) => {
-  const [kids, setKids] = useState({});
-  if (!children) return <></>;
-  if (!Array.isArray(children)) return <AnimateInOutHelper component={children}></AnimateInOutHelper>;
-  if (children.length === 0) return <></>;
+////////////////////////////////////////////
 
-  const currentKids: Record<string, T> = {};
-  children.forEach((child, i) => {
-    const id = i.toString();
-    currentKids[id] = child;
-  });
+type ChildId = number;
 
-  const currentKidIds = Object.keys(currentKids);
-  const previousKidIds = Object.keys(kids);
-  const arrivingChildren = currentKidIds.filter(k => !previousKidIds.includes(k));
-  const leavingChildren = previousKidIds.filter(k => !currentKidIds.includes(k));
+const wait = (ms: number) => new Promise(r => setTimeout(r, ms));
 
-  // if (currentKidIds.length) console.log(" currentKidIds", JSON.stringify(currentKidIds));
-  // if (previousKidIds.length) console.log("  previousKidIds", previousKidIds);
+interface DelayUnmountComponent extends Component {
+  key: ChildId;
+}
 
-  if (leavingChildren.length) console.log("Leaving children", JSON.stringify(leavingChildren));
-  if (arrivingChildren.length) {
-    console.log("Arriving children", arrivingChildren);
-    setKids(currentKidIds.concat(arrivingChildren));
+const DelayUnmount = ({ children, by }: PropsWithChildren<{ by: number }>) => {
+  const allChildrenInOrder = useRef<DelayUnmountComponent[]>([]);
+  const fadingChilds = useRef<DelayUnmountComponent[]>([]);
+  const [x, setX] = useState(1);
+
+  const unmount = (c: DelayUnmountComponent) => {
+    allChildrenInOrder.current = allChildrenInOrder.current.filter(each => each !== c);
+    fadingChilds.current = fadingChilds.current.filter(each => each !== c);
+  };
+
+  const childs: DelayUnmountComponent[] = !children ? [] : Array.isArray(children) ? children : [children];
+  let everChildren = [];
+  let j = 0;
+  for (let i = 0; i < childs.length; i++) {
+    const child = childs[i];
+    if (childs[i].key === allChildrenInOrder.current[j]?.key) {
+      console.log("update");
+      j++;
+      everChildren.push(child);
+    } else if (!allChildrenInOrder.current.some(c => c.key === child.key)) {
+      console.log("add");
+      allChildrenInOrder.current.splice(j, 0, child);
+      j++; // retry the component that just got shifted down to j+1
+      everChildren.push(child);
+    } else {
+      console.log("remove");
+      // allChildrenInOrder[j] was removed from childs...
+      const noLongerLive = allChildrenInOrder.current[j];
+      j++; // don't retry j
+      //i--; // retry i
+      everChildren.push(noLongerLive);
+      (findDOMNode(noLongerLive) as HTMLElement)!.style.width = "0";
+      if (!fadingChilds.current.includes(noLongerLive))
+        wait(by).finally(() => {
+          console.log("done waiting");
+          unmount(noLongerLive);
+          setX(x + 1);
+        });
+    }
+  }
+  for (; j < allChildrenInOrder.current.length; j++) {
+    console.log("remove from end");
+    const noLongerLive = allChildrenInOrder.current[j];
+    everChildren.push(noLongerLive);
+    (findDOMNode(noLongerLive) as HTMLElement)!.style.width = "0";
+    if (!fadingChilds.current.includes(noLongerLive))
+      wait(by).finally(() => {
+        console.log("done waiting");
+        unmount(noLongerLive);
+        setX(x + 1);
+      });
   }
 
-  return (
-    <>
-      {children.map((child, i) => {
-        return <AnimateInOutHelper key={i} component={child}></AnimateInOutHelper>;
-      })}
-    </>
-  );
-};
+  console.log(allChildrenInOrder.current);
 
-const AnimateInOutHelper = <T,>({ component }: { component: ReactNode }) => {
-  const previousRender = useMemo(() => component, [!!component]);
-  return <>{component || previousRender}</>;
+  return <>{everChildren}</>;
 };
