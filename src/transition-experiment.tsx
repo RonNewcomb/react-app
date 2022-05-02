@@ -21,9 +21,15 @@ export const TransitionExperiment = () => {
   );
 };
 
-const MyItem = ({ x }: { x: number }) => (
-  <div style={{ backgroundColor: "lightblue", width: "6em", padding: "0.5em", margin: "1em", transition: "width" }}>{x}</div>
-);
+const MyItem = ({ x }: { x: number }) => {
+  const me = useRef<HTMLDivElement>(null);
+  useUnmount(() => (me && me.current ? (me.current.style.width = "0px") : undefined));
+  return (
+    <div ref={me} style={{ backgroundColor: "lightblue", width: "6em", padding: "0.5em", margin: "1em", transition: "width" }}>
+      {x}
+    </div>
+  );
+};
 
 ////////////////////////////////////////////
 
@@ -38,6 +44,7 @@ interface DelayUnmountComponent extends Component {
 const DelayUnmount = ({ children, by }: PropsWithChildren<{ by: number }>) => {
   const allChildrenInOrder = useRef<DelayUnmountComponent[]>([]);
   const fadingChilds = useRef<DelayUnmountComponent[]>([]);
+  const elementRef = useRef<HTMLDivElement>(null);
   const [x, setX] = useState(1);
 
   const unmount = (c: DelayUnmountComponent) => {
@@ -66,29 +73,40 @@ const DelayUnmount = ({ children, by }: PropsWithChildren<{ by: number }>) => {
       j++; // don't retry j
       //i--; // retry i
       everChildren.push(noLongerLive);
-      (findDOMNode(noLongerLive) as HTMLElement)!.style.width = "0";
-      if (!fadingChilds.current.includes(noLongerLive))
-        wait(by).finally(() => {
+      if (!fadingChilds.current.includes(noLongerLive)) {
+        const onAnimationEndPromise = wait(by).finally(() => {
           console.log("done waiting");
           unmount(noLongerLive);
           setX(x + 1);
         });
+        (elementRef.current || document).dispatchEvent(new CustomEvent("unmounting", { bubbles: false, detail: onAnimationEndPromise }));
+      }
     }
   }
   for (; j < allChildrenInOrder.current.length; j++) {
     console.log("remove from end");
     const noLongerLive = allChildrenInOrder.current[j];
     everChildren.push(noLongerLive);
-    (findDOMNode(noLongerLive) as HTMLElement)!.style.width = "0";
-    if (!fadingChilds.current.includes(noLongerLive))
-      wait(by).finally(() => {
-        console.log("done waiting");
+    if (!fadingChilds.current.includes(noLongerLive)) {
+      const onAnimationEndPromise = wait(by).finally(() => {
+        console.log("done waiting from end");
         unmount(noLongerLive);
         setX(x + 1);
       });
+      (elementRef.current || document).dispatchEvent(new CustomEvent("unmounting", { bubbles: false, detail: onAnimationEndPromise }));
+    }
   }
 
   console.log(allChildrenInOrder.current);
 
-  return <>{everChildren}</>;
+  return <div ref={elementRef}>{everChildren}</div>;
+};
+
+export const useUnmount = (fn: () => void) => {
+  const handler = React.useCallback(fn, []);
+  useEffect(() => {
+    document.addEventListener("unmount", handler);
+    return () => document.removeEventListener("unmount", handler);
+  });
+  return;
 };
