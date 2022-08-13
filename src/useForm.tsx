@@ -6,9 +6,10 @@ type AnyFieldElement = HTMLInputElement | HTMLTextAreaElement | HTMLSelectElemen
 export function useForm<T>(initial: T): [T, (event: ChangeEvent<AnyFieldElement>) => void, (diff: Partial<T>) => void] {
   const [gettor, settor] = useReducer((prevState: T, payloadForMergeAction: Partial<T>) => ({ ...prevState, ...payloadForMergeAction } as T), initial);
   const setFromEvent = (event: ChangeEvent<AnyFieldElement>): void => {
-    const element = event.target;
+    const element = event.target as HTMLInputElement;
     const name = element.getAttribute("name") || element.getAttribute("id") || element.tagName + Date.now();
-    settor({ [name]: element.value } as Partial<T | any>);
+    const value = element.type === "checkbox" ? element.checked : element.value;
+    settor({ [name]: value } as Partial<T | any>);
   };
   return [gettor, setFromEvent, settor];
 }
@@ -21,6 +22,7 @@ const RegisterForm = ({ submit }: { submit: FormEventHandler<HTMLFormElement> })
     firstName: "",
     lastName: "",
     email: "",
+    isHuman: false,
   });
 
   return (
@@ -28,6 +30,7 @@ const RegisterForm = ({ submit }: { submit: FormEventHandler<HTMLFormElement> })
       <input name="username" value={form.username} onChange={updateForm} />
       <input name="password" value={form.password} onChange={updateForm} />
       <input name="password2" value={form.confirmPassword} onChange={e => merge({ confirmPassword: e.target.value })} />
+      <input name="isHuman" type="checkbox" checked={form.isHuman} onChange={updateForm} />
       <button name="multipleSubmitButtonsActLikeRadioButtons" value="option1" type="submit" />
       <button name="multipleSubmitButtonsActLikeRadioButtons" value="option22" type="submit" />
     </form>
