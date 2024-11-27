@@ -1,8 +1,9 @@
 {
     "compilerOptions": {
-        "target": "es2020",
-        "moduleResolution": "Node",
-        "jsx": "react",
+        "target": "ESNext",
+        "moduleResolution": "bundler",
+        "jsx": "react-jsx",
+        "outDir": "public/build",
         "allowJs": false,
         "skipLibCheck": false,
         "esModuleInterop": false,
@@ -12,14 +13,13 @@
         "module": "esnext",
         "resolveJsonModule": true,
         "isolatedModules": true,
-        "noEmit": true,
         "lib": [
             "dom",
             "dom.iterable",
-            "es2020"
+            "ESNext"
         ]
     },
     "include": [
-        "src/**/*"
+        "src/index.tsx"
     ]
 }
