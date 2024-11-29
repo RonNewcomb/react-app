@@ -2,7 +2,7 @@
     "compilerOptions": {
         "target": "ESNext",
         "moduleResolution": "bundler",
-        "jsx": "react-jsx",
+        "jsx": "react",
         "outDir": "public/build",
         "allowJs": false,
         "skipLibCheck": false,

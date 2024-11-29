@@ -1,18 +1,21 @@
 <html>
   <head>
-    <base href="." />
+    <!-- <base href="." /> -->
+
     <script type="importmap">
       {
         "imports": {
-          "react": "./node_modules/react/umd/react.development.js",
-          "react/jsx-runtime": "./node_modules/react/cjs/react-jsx-runtime.development.js",
-          "react-dom": "./node_modules/react-dom/umd/react-dom.development.js"
+          "react": "./esm/react.js",
+          "react-dom": "./esm/react-dom.js",
+
+          "umd-react": "https://unpkg.com/react@17.0.2/umd/react.development.js",
+          "umd-react-dom": "https://unpkg.com/react-dom@17.0.2/umd/react-dom.development.js"
         }
       }
     </script>
   </head>
   <body style="background-color: black; color: white">
-    <div id="react-app"></div>
-    <script src="./build/index.js" type="module"></script>
+    <react-app />
+    <script type="module" src="./build/index.js"></script>
   </body>
 </html>
