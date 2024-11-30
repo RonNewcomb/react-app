@@ -55,13 +55,13 @@ function browserRootedUrlToProjectRootedPath(url?: string) {
   if (!filePath || filePath == "/") filePath = "/index.html";
   if (!filePath.includes("node_modules")) filePath = path.join(browserVisibleFolder, filePath);
   if (!path.extname(filePath)) filePath += ".js";
-  return path.normalize(filePath);
+  return "./" + path.normalize(filePath);
 }
 
 async function GET(request: Request, response: Response) {
   const filePath = browserRootedUrlToProjectRootedPath(request.url);
 
-  if (!!cache[filePath] && request.headers["cache-control"] !== "no-cache" && filePath !== "/index.html") {
+  if (!!cache[filePath] && request.headers["cache-control"] !== "no-cache" && filePath !== "public\\index.html") {
     console.log("cached", filePath);
     response.writeHead(304);
     return response.end();
@@ -95,7 +95,7 @@ async function CHECKOUT(request: Request, response: Response) {
 const watcher = fs.watch(path.join(__dirname, browserVisibleFolder), { recursive: true, persistent: false });
 for await (const event of watcher) {
   if (!event.filename || event.eventType !== "change") continue;
-  console.log("EVENT.filename", event.filename);
+  console.log("CHANGED", event.filename);
   const filePathFromBrowserRoot = path.join(".", event.filename);
   // console.log(event.eventType, event.filename, filePath);
   const filePath = browserRootedUrlToProjectRootedPath(filePathFromBrowserRoot);

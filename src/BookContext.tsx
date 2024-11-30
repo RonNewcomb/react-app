@@ -1,11 +1,14 @@
 import * as React from "react";
 import { createContext, ReactNode, useContext, useMemo, useState } from "react";
-import "./folder/subthing";
+import { setting } from "./folder/subthing";
+import "jsx-runtime";
 
 export interface Book {
   name: string;
   desc: string;
 }
+
+console.log("BookContent", setting);
 
 interface IBookContext {
   book: Book;
