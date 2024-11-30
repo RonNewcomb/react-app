@@ -23,6 +23,8 @@ const mimes = {
   ".ttf": "application/x-font-ttf",
 };
 
+const publicFolder = "public";
+
 const allowedMethods = { GET, PATCH };
 
 let cache: Record<string, Promise<ArrayBufferLike>> = {};
@@ -34,28 +36,34 @@ type Request = http.IncomingMessage;
 type Response = http.ServerResponse<http.IncomingMessage> & { req: http.IncomingMessage };
 
 function HTTP405(_, response: Response) {
-  response.setHeader("Allow", Object.keys(allowedMethods).join());
-  response.write(405);
+  response.writeHead(405, { Allow: Object.keys(allowedMethods).join() });
   response.end();
 }
 
 async function GET(request: Request, response: Response) {
   let filePath = (request.url || "").replace(/\.\./g, "") || "/";
   if (filePath == "/") filePath = "/index.html";
-  filePath = filePath.includes("node_modules") ? "." + filePath : "./public" + filePath;
+  if (!filePath.includes("node_modules")) filePath = path.join(publicFolder, filePath);
 
-  let extname = path.extname(filePath);
+  const extname = path.extname(filePath);
   if (!extname) filePath = filePath + ".js";
-  console.log(filePath);
 
-  return (cache[filePath] ||= fs.readFile(filePath))
+  if (!!cache[filePath] && request.headers["cache-control"] !== "no-cache") {
+    console.log("cached", filePath);
+    response.writeHead(304);
+    return response.end();
+  }
+  console.log("loading", filePath);
+
+  cache[filePath] = fs.readFile(filePath);
+  return cache[filePath]
     .then(content => {
       response.writeHead(200, { "Content-Type": mimes[extname] || mimes[".js"], "Cache-Control": "max-age=31536000" });
       response.end(content);
     })
     .catch(error => {
       console.error(error);
-      response.writeHead(error.code == "ENOENT" ? 404 : 500, { "Content-Type": "text/plain" });
+      response.writeHead(404, { "Content-Type": "text/plain" });
       response.end(JSON.stringify(error));
     });
 }
@@ -70,14 +78,11 @@ async function PATCH(request: Request, response: Response) {
   response.end(JSON.stringify(changedFilenames));
 }
 
-const watchedFolder = "public";
-const watcher = fs.watch(path.join(__dirname, watchedFolder), { recursive: true, persistent: false });
+const watcher = fs.watch(path.join(__dirname, publicFolder), { recursive: true, persistent: false });
 for await (const event of watcher) {
   if (!event.filename) continue;
-  const importUrl = path.join(".", watchedFolder, event.filename);
+  const importUrl = path.join(".", publicFolder, event.filename);
   console.log(event.eventType, event.filename, importUrl);
   for (const done of doneFunctions) done([importUrl]);
   doneFunctions = [];
 }
-
-/// cache

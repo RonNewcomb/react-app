@@ -3,7 +3,7 @@
         "target": "ESNext",
         "moduleResolution": "bundler",
         "jsx": "react",
-        "outDir": "public/build",
+        "outDir": "public/js",
         "allowJs": false,
         "skipLibCheck": false,
         "esModuleInterop": false,
