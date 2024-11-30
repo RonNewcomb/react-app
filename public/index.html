@@ -18,14 +18,17 @@
     <react-app />
     <script type="module" src="./js/index.js"></script>
     <script type="module">
-      function hmrLongPoll() {
-        fetch(".", { method: "PATCH" })
-          .finally(hmrLongPoll)
+      (function hmrLongPoll(x) {
+        fetch("CHECKOUT", { method: "CHECKOUT" })
+          .then(x => (x.ok ? hmrLongPoll(x) : undefined))
           .then(x => x.json())
-          .then(filenames => Promise.all(filenames.map(f => fetch(f, { cache: "no-cache" }))))
-          .then(() => location.reload());
-      }
-      hmrLongPoll();
+          .then(filenames => {
+            console.log(filenames, "changed");
+            Promise.all(filenames.map(f => fetch(f, { cache: "no-cache" })));
+          });
+        //.then(() => location.reload());
+        return x;
+      })();
     </script>
   </body>
 </html>
