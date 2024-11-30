@@ -1,34 +1,11 @@
 import http from "http";
 import path from "path";
+import url from "url";
 import fs from "fs/promises";
+const __filename = url.fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
-http
-  .createServer(async (request, response) => {
-    let filePath = (request.url || "").replace(/\.\./g, "") || "/";
-    if (filePath == "/") filePath = "/index.html";
-    filePath = filePath.includes("node_modules") ? "." + filePath : "./public" + filePath;
-
-    const extname = path.extname(filePath);
-    if (!extname) filePath = filePath + ".js";
-    console.log(filePath);
-
-    let error: any;
-    const content = await fs.readFile(filePath).catch(e => (error = e));
-
-    if (!error) {
-      response.writeHead(200, { "Content-Type": mime[extname] || mime[".js"] });
-      response.end(content);
-    } else {
-      console.error(error);
-      response.writeHead(error.code == "ENOENT" ? 404 : 500, { "Content-Type": "text/plain" });
-      response.end(JSON.stringify(error));
-    }
-  })
-  .listen(4200);
-
-console.log(`Server running at http://localhost:4200/`);
-
-const mime = {
+const mimes = {
   ".ico": "image/x-icon",
   ".html": "text/html",
   ".js": "text/javascript",
@@ -45,3 +22,59 @@ const mime = {
   ".eot": "application/vnd.ms-fontobject",
   ".ttf": "application/x-font-ttf",
 };
+
+const allowedMethods = { GET, PATCH };
+
+http.createServer((req, res) => (allowedMethods[req.method!] || HTTP405)(req, res)).listen(4200);
+console.log(`Server running at http://localhost:4200/`);
+
+type Request = http.IncomingMessage;
+type Response = http.ServerResponse<http.IncomingMessage> & { req: http.IncomingMessage };
+
+function HTTP405(_, response: Response) {
+  response.setHeader("Allow", Object.keys(allowedMethods).join());
+  response.write(405);
+  response.end();
+}
+
+function GET(request: Request, response: Response) {
+  let filePath = (request.url || "").replace(/\.\./g, "") || "/";
+  if (filePath == "/") filePath = "/index.html";
+  filePath = filePath.includes("node_modules") ? "." + filePath : "./public" + filePath;
+
+  let extname = path.extname(filePath);
+  if (!extname) filePath = filePath + ".js";
+  console.log(filePath);
+
+  return fs
+    .readFile(filePath)
+    .then(content => {
+      response.writeHead(200, { "Content-Type": mimes[extname] || mimes[".js"] });
+      response.end(content);
+    })
+    .catch(error => {
+      console.error(error);
+      response.writeHead(error.code == "ENOENT" ? 404 : 500, { "Content-Type": "text/plain" });
+      response.end(JSON.stringify(error));
+    });
+}
+
+// not HMR really
+
+let doneFunctions: Array<(filenames: string[]) => void> = [];
+
+async function PATCH(request: Request, response: Response) {
+  const changedFilenames = await new Promise<string[]>(done => doneFunctions.push(done));
+  response.setHeaders(new Headers({ "Content-Type": "text/plain" }));
+  response.end(JSON.stringify(changedFilenames));
+}
+
+const watchedFolder = "public";
+const watcher = fs.watch(path.join(__dirname, watchedFolder), { recursive: true, persistent: false });
+for await (const event of watcher) {
+  if (!event.filename) continue;
+  const importUrl = path.join(".", watchedFolder, event.filename);
+  console.log(event.eventType, event.filename, importUrl);
+  for (const done of doneFunctions) done([importUrl]);
+  doneFunctions = [];
+}
