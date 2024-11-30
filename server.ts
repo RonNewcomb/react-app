@@ -30,7 +30,7 @@ const browserVisibleFolder = "public";
 
 const allowedMethods = { GET, CHECKOUT };
 
-let cache: Record<string, Promise<ArrayBufferLike>> = {};
+let cache: Record<string, Promise<ArrayBufferLike | string>> = {};
 
 const commandsToExec = ["npm run tsc"];
 for (const command of commandsToExec)
@@ -55,7 +55,7 @@ function browserRootedUrlToProjectRootedPath(url?: string) {
   if (!filePath || filePath == "/") filePath = "/index.html";
   if (!filePath.includes("node_modules")) filePath = path.join(browserVisibleFolder, filePath);
   if (!path.extname(filePath)) filePath += ".js";
-  return "./" + path.normalize(filePath);
+  return ".\\" + path.normalize(filePath);
 }
 
 async function GET(request: Request, response: Response) {
@@ -68,7 +68,7 @@ async function GET(request: Request, response: Response) {
   }
   console.log("loading", filePath);
 
-  cache[filePath] = fs.readFile(filePath);
+  cache[filePath] = fs.readFile(filePath).then(content => conditionalTransform(content, filePath));
   return cache[filePath]
     .then(content => {
       response.writeHead(200, { "Content-Type": mimes[path.extname(filePath)], "Cache-Control": "max-age=31536000" });
@@ -79,6 +79,15 @@ async function GET(request: Request, response: Response) {
       response.writeHead(404, { "Content-Type": "text/plain" });
       response.end(JSON.stringify(error));
     });
+}
+
+function conditionalTransform(content: Buffer, filePath: string) {
+  if (filePath.includes("\\cjs\\") || filePath.endsWith(".cjs")) {
+    console.log("-- CommonJS transform");
+    return "export {}; var process = {env:{}};".concat(content.toString().replace(/\brequire\s*\(/g, "await import("));
+  }
+
+  return content;
 }
 
 // not HMR really
