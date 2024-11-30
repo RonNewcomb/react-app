@@ -25,6 +25,8 @@ const mimes = {
 
 const allowedMethods = { GET, PATCH };
 
+let cache: Record<string, Promise<ArrayBufferLike>> = {};
+
 http.createServer((req, res) => (allowedMethods[req.method!] || HTTP405)(req, res)).listen(4200);
 console.log(`Server running at http://localhost:4200/`);
 
@@ -37,7 +39,7 @@ function HTTP405(_, response: Response) {
   response.end();
 }
 
-function GET(request: Request, response: Response) {
+async function GET(request: Request, response: Response) {
   let filePath = (request.url || "").replace(/\.\./g, "") || "/";
   if (filePath == "/") filePath = "/index.html";
   filePath = filePath.includes("node_modules") ? "." + filePath : "./public" + filePath;
@@ -46,10 +48,9 @@ function GET(request: Request, response: Response) {
   if (!extname) filePath = filePath + ".js";
   console.log(filePath);
 
-  return fs
-    .readFile(filePath)
+  return (cache[filePath] ||= fs.readFile(filePath))
     .then(content => {
-      response.writeHead(200, { "Content-Type": mimes[extname] || mimes[".js"] });
+      response.writeHead(200, { "Content-Type": mimes[extname] || mimes[".js"], "Cache-Control": "max-age=31536000" });
       response.end(content);
     })
     .catch(error => {
@@ -78,3 +79,5 @@ for await (const event of watcher) {
   for (const done of doneFunctions) done([importUrl]);
   doneFunctions = [];
 }
+
+/// cache
