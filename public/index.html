@@ -17,5 +17,15 @@
   <body style="background-color: black; color: white">
     <react-app />
     <script type="module" src="./js/index.js"></script>
+    <script type="module">
+      function hmrLongPoll() {
+        fetch(".", { method: "PATCH" })
+          .finally(hmrLongPoll)
+          .then(x => x.json())
+          .then(filenames => Promise.all(filenames.map(f => fetch(f, { cache: "no-cache" }))))
+          .then(() => location.reload());
+      }
+      hmrLongPoll();
+    </script>
   </body>
 </html>

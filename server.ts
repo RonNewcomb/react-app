@@ -78,11 +78,14 @@ async function PATCH(request: Request, response: Response) {
   response.end(JSON.stringify(changedFilenames));
 }
 
+// endless loop
 const watcher = fs.watch(path.join(__dirname, publicFolder), { recursive: true, persistent: false });
 for await (const event of watcher) {
   if (!event.filename) continue;
-  const importUrl = path.join(".", publicFolder, event.filename);
+  const importUrl = path.join(".", event.filename);
   console.log(event.eventType, event.filename, importUrl);
   for (const done of doneFunctions) done([importUrl]);
   doneFunctions = [];
 }
+
+console.log("finished setup");
