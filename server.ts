@@ -51,10 +51,10 @@ function HTTP405(_, response: Response) {
 }
 
 function browserRootedUrlToProjectRootedPath(url?: string) {
-  let filePath = (url || "").replace(/\.\./g, "") || "/";
-  if (!filePath || filePath == "/") filePath = "/index.html";
-  if (!filePath.includes("node_modules")) filePath = ".\\" + path.join(browserVisibleFolder, filePath);
-  else filePath = "." + filePath;
+  let filePath = url || "/";
+  if (filePath === "/") filePath = "/index.html";
+  if (filePath.includes("node_modules")) filePath = "." + filePath;
+  else filePath = ".\\" + path.join(browserVisibleFolder, filePath);
   if (!path.extname(filePath)) filePath += ".js";
   return path.normalize(filePath);
 }
@@ -62,7 +62,7 @@ function browserRootedUrlToProjectRootedPath(url?: string) {
 async function GET(request: Request, response: Response) {
   const filePath = browserRootedUrlToProjectRootedPath(request.url);
 
-  if (!!cache[filePath] && request.headers["cache-control"] !== "no-cache" && filePath !== "public\\index.html") {
+  if (!!cache[filePath] && request.headers["cache-control"] !== "no-cache") {
     console.log("filePath", filePath, "(from cache)");
     response.writeHead(304);
     return response.end();
@@ -88,31 +88,29 @@ const cjs = {
 
 function conditionalTransform(content: Buffer, filePath: string) {
   if (filePath.includes("\\cjs\\") || filePath.endsWith(".cjs") || cjs[filePath]) {
-    console.log("-- CommonJS transform");
+    // TODO doesn't work  for  dynamic import   require(x ? "this" : "that")
     const text = content.toString();
     //const pieces: RegExpExecArray | null = new RegExp(/\brequire\s*\(([^\)]+)\)/g).exec(text);
-    const imports: string[][] = [];
-    const replacs: string[][] = [];
+    const imports: string[] = [];
+    const requires: string[] = [];
     // const exports = {};
     // for (const match of text.matchAll(/\bexports\.((\w|\d|_)+)/g)) exports[match[1]] = true;
     // for (const match of text.matchAll(/\bmodule\.exports\.((\w|\d|_)+)/g)) exports[match[1]] = true;
     for (const match of text.matchAll(/\brequire\s*\(([^\)]+)\)/g)) {
       const packageId = match[1];
-      const packageVar = packageId.replace(/[^a-zA-Z]/g, "_");
-      imports.push(["import _require_", packageVar, " from ", packageId, ";\n"]);
-      replacs.push(["\tif (m === ", packageId, ") return _require_", packageVar, ";\n"]);
+      const packageVar = packageId.replace(/[^a-zA-Z0-9]/g, "_");
+      imports.push("import _require_", packageVar, " from ", packageId, ";\n");
+      requires.push("\tif (m === ", packageId, ") return _require_", packageVar, ";\n");
     }
     return [
       imports,
       "const module = {exports:{}};\nlet exports = module.exports;\nwindow.process ||= {env:{}};\nfunction require(m) {\n",
-      replacs,
-      // "}\nexport { ",
-      // Object.keys(exports).join(),
+      requires,
       " };\n",
       text,
       "\nexport default module.exports;\n",
     ]
-      .flat(2)
+      .flat()
       .join("");
   }
 
