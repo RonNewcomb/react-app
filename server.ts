@@ -53,20 +53,21 @@ function HTTP405(_, response: Response) {
 function browserRootedUrlToProjectRootedPath(url?: string) {
   let filePath = (url || "").replace(/\.\./g, "") || "/";
   if (!filePath || filePath == "/") filePath = "/index.html";
-  if (!filePath.includes("node_modules")) filePath = path.join(browserVisibleFolder, filePath);
+  if (!filePath.includes("node_modules")) filePath = ".\\" + path.join(browserVisibleFolder, filePath);
+  else filePath = "." + filePath;
   if (!path.extname(filePath)) filePath += ".js";
-  return ".\\" + path.normalize(filePath);
+  return path.normalize(filePath);
 }
 
 async function GET(request: Request, response: Response) {
   const filePath = browserRootedUrlToProjectRootedPath(request.url);
 
   if (!!cache[filePath] && request.headers["cache-control"] !== "no-cache" && filePath !== "public\\index.html") {
-    console.log(filePath, "(from cache)");
+    console.log("filePath", filePath, "(from cache)");
     response.writeHead(304);
     return response.end();
   }
-  console.log(filePath);
+  console.log("filePath", filePath);
 
   cache[filePath] = fs.readFile(filePath).then(content => conditionalTransform(content, filePath));
   return cache[filePath]
@@ -81,16 +82,20 @@ async function GET(request: Request, response: Response) {
     });
 }
 
+const cjs = {
+  "node_modules\\object-assign\\index.js": true,
+};
+
 function conditionalTransform(content: Buffer, filePath: string) {
-  if (filePath.includes("\\cjs\\") || filePath.endsWith(".cjs")) {
+  if (filePath.includes("\\cjs\\") || filePath.endsWith(".cjs") || cjs[filePath]) {
     console.log("-- CommonJS transform");
     const text = content.toString();
     //const pieces: RegExpExecArray | null = new RegExp(/\brequire\s*\(([^\)]+)\)/g).exec(text);
     const imports: string[][] = [];
     const replacs: string[][] = [];
-    const exports = {};
-    for (const match of text.matchAll(/\bexports\.((\w|\d|_)+)/g)) exports[match[1]] = true;
-    for (const match of text.matchAll(/\bmodule\.exports\.((\w|\d|_)+)/g)) exports[match[1]] = true;
+    // const exports = {};
+    // for (const match of text.matchAll(/\bexports\.((\w|\d|_)+)/g)) exports[match[1]] = true;
+    // for (const match of text.matchAll(/\bmodule\.exports\.((\w|\d|_)+)/g)) exports[match[1]] = true;
     for (const match of text.matchAll(/\brequire\s*\(([^\)]+)\)/g)) {
       const packageId = match[1];
       const packageVar = packageId.replace(/[^a-zA-Z]/g, "_");
@@ -99,12 +104,13 @@ function conditionalTransform(content: Buffer, filePath: string) {
     }
     return [
       imports,
-      "window.module ||= {exports:{}};\nvar exports = window.module.exports;\nwindow.process ||= {env:{}};\nfunction require(m) {\n",
+      "const module = {exports:{}};\nlet exports = module.exports;\nwindow.process ||= {env:{}};\nfunction require(m) {\n",
       replacs,
       // "}\nexport { ",
       // Object.keys(exports).join(),
       " };\n",
       text,
+      "\nexport default module.exports;\n",
     ]
       .flat(2)
       .join("");
