@@ -62,11 +62,11 @@ async function GET(request: Request, response: Response) {
   const filePath = browserRootedUrlToProjectRootedPath(request.url);
 
   if (!!cache[filePath] && request.headers["cache-control"] !== "no-cache" && filePath !== "public\\index.html") {
-    console.log("cached", filePath);
+    console.log(filePath, "(from cache)");
     response.writeHead(304);
     return response.end();
   }
-  console.log("loading", filePath);
+  console.log(filePath);
 
   cache[filePath] = fs.readFile(filePath).then(content => conditionalTransform(content, filePath));
   return cache[filePath]
@@ -84,7 +84,30 @@ async function GET(request: Request, response: Response) {
 function conditionalTransform(content: Buffer, filePath: string) {
   if (filePath.includes("\\cjs\\") || filePath.endsWith(".cjs")) {
     console.log("-- CommonJS transform");
-    return "export {}; var process = {env:{}};".concat(content.toString().replace(/\brequire\s*\(/g, "await import("));
+    const text = content.toString();
+    //const pieces: RegExpExecArray | null = new RegExp(/\brequire\s*\(([^\)]+)\)/g).exec(text);
+    const imports: string[][] = [];
+    const replacs: string[][] = [];
+    const exports = {};
+    for (const match of text.matchAll(/\bexports\.((\w|\d|_)+)/g)) exports[match[1]] = true;
+    for (const match of text.matchAll(/\bmodule\.exports\.((\w|\d|_)+)/g)) exports[match[1]] = true;
+    for (const match of text.matchAll(/\brequire\s*\(([^\)]+)\)/g)) {
+      const packageId = match[1];
+      const packageVar = packageId.replace(/[^a-zA-Z]/g, "_");
+      imports.push(["import _require_", packageVar, " from ", packageId, ";\n"]);
+      replacs.push(["\tif (m === ", packageId, ") return _require_", packageVar, ";\n"]);
+    }
+    return [
+      imports,
+      "window.module ||= {exports:{}};\nvar exports = window.module.exports;\nwindow.process ||= {env:{}};\nfunction require(m) {\n",
+      replacs,
+      // "}\nexport { ",
+      // Object.keys(exports).join(),
+      " };\n",
+      text,
+    ]
+      .flat(2)
+      .join("");
   }
 
   return content;
@@ -104,13 +127,13 @@ async function CHECKOUT(request: Request, response: Response) {
 const watcher = fs.watch(path.join(__dirname, browserVisibleFolder), { recursive: true, persistent: false });
 for await (const event of watcher) {
   if (!event.filename || event.eventType !== "change") continue;
-  console.log("CHANGED", event.filename);
+  // console.log("CHANGED", event.filename);
   const filePathFromBrowserRoot = path.join(".", event.filename);
   // console.log(event.eventType, event.filename, filePath);
   const filePath = browserRootedUrlToProjectRootedPath(filePathFromBrowserRoot);
   delete cache[filePath];
   const importPathFromBrowserRoot = "./" + filePathFromBrowserRoot.replace(/\\/g, "/");
-  console.log("uncached", filePath, "sending", importPathFromBrowserRoot);
+  //console.log("uncached", filePath, "sending", importPathFromBrowserRoot);
   for (const done of doneFunctions) done([importPathFromBrowserRoot]);
   doneFunctions = [];
 }
