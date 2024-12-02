@@ -24,13 +24,14 @@ const mimes = {
   ".ttf": "application/x-font-ttf",
 };
 
-const serverFolder = __filename;
-const projectFolder = ".";
-const browserVisibleFolder = "public";
+const serverFolder = __filename; // if someone moves this file server.ts into a /server/ folder or something
+const projectFolder = "."; // might be .. if serverFolder is under project root
+const browserVisibleFolder = "public"; // cause you don't want the browser to see *everything*
 
 const allowedMethods = { GET, CHECKOUT };
 
 let cache: Record<string, Promise<ArrayBufferLike | string>> = {};
+let cacheable = [".js", ".cjs", ".mjs"]; //, ".css"];
 let parentResource: Record<string, string> = {};
 
 const commandsToExec = ["npm run tsc"];
@@ -69,7 +70,7 @@ async function GET(request: Request, response: Response) {
   //   parentResource[filePath] = projectRootedPath_From_BrowserRootedUrl(request.headers["referer"]); // if a importmap intervened then referer is still index.html
   // }
 
-  if (!!cache[filePath] && request.headers["cache-control"] !== "no-cache") {
+  if (!!cache[filePath] && request.headers["cache-control"] !== "no-cache" && cacheable.includes(path.extname(filePath))) {
     console.log("filePath", filePath, "(from cache)");
     response.writeHead(304);
     return response.end();
@@ -109,7 +110,7 @@ function conditionalTransform(content: Buffer, filePath: string) {
       imports.push("import _require_", packageVar, " from ", packageId, ";\n");
       requires.push("\tif (m === ", packageId, ") return _require_", packageVar, ";\n");
     }
-    const exportsString = Object.keys(exports).join();
+    const exportsString = Object.keys(exports);
     return [
       imports,
       "const module = {exports:{}};\nlet exports = module.exports;\nwindow.process ||= {env:{}};\nfunction require(m) {\n",
@@ -153,7 +154,7 @@ function clearCache(filePath: string, files: string[]) {
 // const watcher = fs.watch(path.join(__dirname, browserVisibleFolder), { recursive: true, persistent: false });
 // for await (const event of watcher) {
 //   if (!event.filename || event.eventType !== "change") continue;
-//   if (![".js", ".html", ".css"].includes(path.extname(event.filename))) continue;
+//   if (!cacheable.includes(path.extname(event.filename))) continue;
 //   console.log("CHANGED", event.filename);
 //   // watcher root will be browser root since browserVisibleFolder was passed to it
 //   const filePathFromWatcherRoot = path.join(".", event.filename); // also fixes slashes // ex 'js\\index.js'
@@ -166,5 +167,3 @@ function clearCache(filePath: string, files: string[]) {
 //   for (const done of doneFunctions) done(filePathsFromBrowserRootToReload);
 //   doneFunctions = [];
 // }
-
-console.log("finished setup");
