@@ -1,5 +1,5 @@
 console.log("two");
 
-export const setting = 7;
+export const setting = 67;
 
 console.log("setting", setting);

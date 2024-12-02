@@ -1,9 +1,9 @@
 import http from "http";
 import path from "path";
-import url from "url";
+import urls from "url";
 import fs from "fs/promises";
 import proc from "child_process";
-const __filename = url.fileURLToPath(import.meta.url);
+const __filename = urls.fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const mimes = {
@@ -31,6 +31,7 @@ const browserVisibleFolder = "public";
 const allowedMethods = { GET, CHECKOUT };
 
 let cache: Record<string, Promise<ArrayBufferLike | string>> = {};
+let parentResource: Record<string, string> = {};
 
 const commandsToExec = ["npm run tsc"];
 for (const command of commandsToExec)
@@ -50,7 +51,7 @@ function HTTP405(_, response: Response) {
   response.end();
 }
 
-function browserRootedUrlToProjectRootedPath(url?: string) {
+function projectRootedPath_From_BrowserRootedUrl(url?: string) {
   let filePath = url || "/";
   if (filePath === "/") filePath = "/index.html";
   if (filePath.includes("node_modules")) filePath = "." + filePath;
@@ -60,7 +61,13 @@ function browserRootedUrlToProjectRootedPath(url?: string) {
 }
 
 async function GET(request: Request, response: Response) {
-  const filePath = browserRootedUrlToProjectRootedPath(request.url);
+  const filePath = projectRootedPath_From_BrowserRootedUrl(request.url);
+
+  // if (request.headers["referer"]) {
+  //   const url = new URL(request.headers["referer"]).pathname;
+  //   console.log("referer", url); // if a importmap intervened then referer is still index.html
+  //   parentResource[filePath] = projectRootedPath_From_BrowserRootedUrl(request.headers["referer"]); // if a importmap intervened then referer is still index.html
+  // }
 
   if (!!cache[filePath] && request.headers["cache-control"] !== "no-cache") {
     console.log("filePath", filePath, "(from cache)");
@@ -86,6 +93,8 @@ const cjs = {
   "node_modules\\object-assign\\index.js": true,
 };
 
+const umd = {};
+
 function conditionalTransform(content: Buffer, filePath: string) {
   if (filePath.includes("\\cjs\\") || filePath.endsWith(".cjs") || cjs[filePath]) {
     // TODO doesn't work  for  dynamic import   require(x ? "this" : "that")
@@ -93,9 +102,6 @@ function conditionalTransform(content: Buffer, filePath: string) {
     //const pieces: RegExpExecArray | null = new RegExp(/\brequire\s*\(([^\)]+)\)/g).exec(text);
     const imports: string[] = [];
     const requires: string[] = [];
-    // const exports = {};
-    // for (const match of text.matchAll(/\bexports\.((\w|\d|_)+)/g)) exports[match[1]] = true;
-    // for (const match of text.matchAll(/\bmodule\.exports\.((\w|\d|_)+)/g)) exports[match[1]] = true;
     for (const match of text.matchAll(/\brequire\s*\(([^\)]+)\)/g)) {
       const packageId = match[1];
       const packageVar = packageId.replace(/[^a-zA-Z0-9]/g, "_");
@@ -109,6 +115,37 @@ function conditionalTransform(content: Buffer, filePath: string) {
       " };\n",
       text,
       "\nexport default module.exports;\n",
+    ]
+      .flat()
+      .join("");
+  }
+  if (filePath.includes("\\umd\\") || umd[filePath]) {
+    // TODO doesn't work  for  dynamic import   require(x ? "this" : "that")
+    const text = content.toString();
+    const imports: string[] = [];
+    const requires: string[] = [];
+    const exports = {};
+    for (const match of text.matchAll(/\bexports\.((\w|\d|_)+)/g)) exports[match[1]] = true;
+    for (const match of text.matchAll(/\bmodule\.exports\.((\w|\d|_)+)/g)) exports[match[1]] = true;
+    for (const match of text.matchAll(/\brequire\s*\(([^\)]+)\)/g)) {
+      const packageId = match[1];
+      const packageVar = packageId.replace(/[^a-zA-Z0-9]/g, "_");
+      imports.push("import _require_", packageVar, " from ", packageId, ";\n");
+      requires.push("\tif (m === ", packageId, ") return _require_", packageVar, ";\n");
+    }
+    const exportsString = Object.keys(exports).join();
+    return [
+      imports,
+      "const self = window;\n",
+      "const module = {exports:{}};\nlet exports = module.exports;\nwindow.process ||= {env:{}};\nfunction require(m) {\n",
+      requires,
+      " };\n",
+      text,
+      "\nexport default module.exports;\nconst { ",
+      exportsString,
+      " } = module.exports;\nexport { ",
+      exportsString,
+      " };",
     ]
       .flat()
       .join("");
@@ -127,19 +164,31 @@ async function CHECKOUT(request: Request, response: Response) {
   response.end(JSON.stringify(changedFilenames));
 }
 
-// endless loop
-const watcher = fs.watch(path.join(__dirname, browserVisibleFolder), { recursive: true, persistent: false });
-for await (const event of watcher) {
-  if (!event.filename || event.eventType !== "change") continue;
-  // console.log("CHANGED", event.filename);
-  const filePathFromBrowserRoot = path.join(".", event.filename);
-  // console.log(event.eventType, event.filename, filePath);
-  const filePath = browserRootedUrlToProjectRootedPath(filePathFromBrowserRoot);
+// accepts projectRootedPath
+function clearCache(filePath: string, files: string[]) {
+  if (!filePath) return files;
   delete cache[filePath];
-  const importPathFromBrowserRoot = "./" + filePathFromBrowserRoot.replace(/\\/g, "/");
-  //console.log("uncached", filePath, "sending", importPathFromBrowserRoot);
-  for (const done of doneFunctions) done([importPathFromBrowserRoot]);
-  doneFunctions = [];
+  files.push(filePath);
+  clearCache(parentResource[filePath], files);
+  return files;
 }
+
+// endless loop
+// const watcher = fs.watch(path.join(__dirname, browserVisibleFolder), { recursive: true, persistent: false });
+// for await (const event of watcher) {
+//   if (!event.filename || event.eventType !== "change") continue;
+//   if (![".js", ".html", ".css"].includes(path.extname(event.filename))) continue;
+//   console.log("CHANGED", event.filename);
+//   // watcher root will be browser root since browserVisibleFolder was passed to it
+//   const filePathFromWatcherRoot = path.join(".", event.filename); // also fixes slashes // ex 'js\\index.js'
+//   const filePathFromProjectRoot = projectRootedPath_From_BrowserRootedUrl(filePathFromWatcherRoot);
+//   const filePathsFromProjectRootToReload = clearCache(filePathFromProjectRoot, []);
+//   console.log({ filePathFromWatcherRoot, filePathFromProjectRoot, filePathsFromProjectRootToReload });
+//   //const importPathFromBrowserRoot = "./" + filePathFromBrowserRoot.replace(/\\/g, "/");
+//   const filePathsFromBrowserRootToReload = filePathsFromProjectRootToReload.map(f => projectRootedPath_From_BrowserRootedUrl(f));
+//   //console.log("uncached", filePath, "sending", importPathFromBrowserRoot);
+//   for (const done of doneFunctions) done(filePathsFromBrowserRootToReload);
+//   doneFunctions = [];
+// }
 
 console.log("finished setup");
