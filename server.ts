@@ -89,42 +89,18 @@ async function GET(request: Request, response: Response) {
     });
 }
 
-const cjs = {
+const classicScriptWithOldModuleSystem = {
   "node_modules\\object-assign\\index.js": true,
 };
 
-const umd = {};
-
 function conditionalTransform(content: Buffer, filePath: string) {
-  if (filePath.includes("\\cjs\\") || filePath.endsWith(".cjs") || cjs[filePath]) {
+  if (classicScriptWithOldModuleSystem[filePath] || filePath.includes("\\cjs\\") || filePath.endsWith(".cjs") || filePath.includes("\\umd\\")) {
     // TODO doesn't work  for  dynamic import   require(x ? "this" : "that")
     const text = content.toString();
     //const pieces: RegExpExecArray | null = new RegExp(/\brequire\s*\(([^\)]+)\)/g).exec(text);
     const imports: string[] = [];
     const requires: string[] = [];
-    for (const match of text.matchAll(/\brequire\s*\(([^\)]+)\)/g)) {
-      const packageId = match[1];
-      const packageVar = packageId.replace(/[^a-zA-Z0-9]/g, "_");
-      imports.push("import _require_", packageVar, " from ", packageId, ";\n");
-      requires.push("\tif (m === ", packageId, ") return _require_", packageVar, ";\n");
-    }
-    return [
-      imports,
-      "const module = {exports:{}};\nlet exports = module.exports;\nwindow.process ||= {env:{}};\nfunction require(m) {\n",
-      requires,
-      " };\n",
-      text,
-      "\nexport default module.exports;\n",
-    ]
-      .flat()
-      .join("");
-  }
-  if (filePath.includes("\\umd\\") || umd[filePath]) {
-    // TODO doesn't work  for  dynamic import   require(x ? "this" : "that")
-    const text = content.toString();
-    const imports: string[] = [];
-    const requires: string[] = [];
-    const exports = {};
+    const exports: Record<string, true> = {};
     for (const match of text.matchAll(/\bexports\.((\w|\d|_)+)/g)) exports[match[1]] = true;
     for (const match of text.matchAll(/\bmodule\.exports\.((\w|\d|_)+)/g)) exports[match[1]] = true;
     for (const match of text.matchAll(/\brequire\s*\(([^\)]+)\)/g)) {
@@ -136,12 +112,12 @@ function conditionalTransform(content: Buffer, filePath: string) {
     const exportsString = Object.keys(exports).join();
     return [
       imports,
-      "const self = window;\n",
       "const module = {exports:{}};\nlet exports = module.exports;\nwindow.process ||= {env:{}};\nfunction require(m) {\n",
       requires,
       " };\n",
       text,
-      "\nexport default module.exports;\nconst { ",
+      "\nexport default module.exports;\n",
+      "const { ",
       exportsString,
       " } = module.exports;\nexport { ",
       exportsString,
