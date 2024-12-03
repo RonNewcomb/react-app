@@ -3,8 +3,8 @@ import path from "path";
 import urls from "url";
 import fs from "fs/promises";
 import proc from "child_process";
-const __filename = urls.fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const __filename = import.meta.filename;
+const __dirname = import.meta.dirname;
 
 const mimes = {
   ".ico": "image/x-icon",
@@ -24,8 +24,8 @@ const mimes = {
   ".ttf": "application/x-font-ttf",
 };
 
-const serverFolder = __filename; // if someone moves this file server.ts into a /server/ folder or something
-const projectFolder = "."; // might be .. if serverFolder is under project root
+const serverFolder = __dirname; // if someone moves this file server.ts into a /server/ folder or something
+const projectFolder = "."; // might be ".." if serverFolder is under project root
 const browserVisibleFolder = "public"; // cause you don't want the browser to see *everything*
 
 const allowedMethods = { GET, CHECKOUT };
@@ -52,7 +52,10 @@ function HTTP405(_, response: Response) {
   response.end();
 }
 
-function projectRootedPath_From_BrowserRootedUrl(url?: string) {
+function projectRootedPath_From_BrowserRootedUrl(url: string | undefined, res: Response) {
+  const absPath = path.normalize(path.join(__dirname, url || "/", url?.endsWith("/") ? "index.html" : ""));
+  if (!absPath.startsWith(__dirname)) return res.writeHead(404), res.end(), "";
+
   let filePath = url || "/";
   if (filePath === "/") filePath = "/index.html";
   if (filePath.includes("node_modules")) filePath = "." + filePath;
@@ -62,7 +65,7 @@ function projectRootedPath_From_BrowserRootedUrl(url?: string) {
 }
 
 async function GET(request: Request, response: Response) {
-  const filePath = projectRootedPath_From_BrowserRootedUrl(request.url);
+  const filePath = projectRootedPath_From_BrowserRootedUrl(request.url, response);
 
   // if (request.headers["referer"]) {
   //   const url = new URL(request.headers["referer"]).pathname;
@@ -94,6 +97,21 @@ const classicScriptWithOldModuleSystem = {
   "node_modules\\object-assign\\index.js": true,
 };
 
+const dynamicRequire = `
+  const xhr = new XMLHttpRequest();
+  let response;
+  xhr.onreadystatechange = event => response = event.target;
+  xhr.open('GET', name, false);
+  xhr.send();
+  // return JSON.parse(response.responseText);
+  const blob = new Blob([response.responseText], { type: "text/javascript" });
+  const url = URL.createObjectURL(blob);
+  let module;
+  import(url).then(m => module = m);
+  while (!module) xhr.send();
+  return module;
+`;
+
 function conditionalTransform(content: Buffer, filePath: string) {
   if (classicScriptWithOldModuleSystem[filePath] || filePath.includes("\\cjs\\") || filePath.endsWith(".cjs") || filePath.includes("\\umd\\")) {
     // TODO doesn't work  for  dynamic import   require(x ? "this" : "that")
@@ -101,20 +119,21 @@ function conditionalTransform(content: Buffer, filePath: string) {
     //const pieces: RegExpExecArray | null = new RegExp(/\brequire\s*\(([^\)]+)\)/g).exec(text);
     const imports: string[] = [];
     const requires: string[] = [];
-    const exports: Record<string, true> = {};
-    for (const match of text.matchAll(/\bexports\.((\w|\d|_)+)/g)) exports[match[1]] = true;
-    for (const match of text.matchAll(/\bmodule\.exports\.((\w|\d|_)+)/g)) exports[match[1]] = true;
     for (const match of text.matchAll(/\brequire\s*\(([^\)]+)\)/g)) {
       const packageId = match[1];
       const packageVar = packageId.replace(/[^a-zA-Z0-9]/g, "_");
       imports.push("import _require_", packageVar, " from ", packageId, ";\n");
       requires.push("\tif (m === ", packageId, ") return _require_", packageVar, ";\n");
     }
+    const exports: Record<string, true> = {};
+    for (const match of text.matchAll(/\bexports\.((\w|\d|_)+)/g)) exports[match[1]] = true;
+    for (const match of text.matchAll(/\bmodule\.exports\.((\w|\d|_)+)/g)) exports[match[1]] = true;
     const exportsString = Object.keys(exports);
     return [
       imports,
       "const module = {exports:{}};\nlet exports = module.exports;\nwindow.process ||= {env:{}};\nfunction require(m) {\n",
       requires,
+      dynamicRequire,
       " };\n",
       text,
       "\nexport default module.exports;\n",
